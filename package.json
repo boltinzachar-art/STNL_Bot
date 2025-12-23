@@ -1,0 +1,9 @@
+{
+  "name": "stnl-bot",
+  "version": "1.0.0",
+  "dependencies": {
+    "telegraf": "^4.16.0",
+    "@google/generative-ai": "^0.11.0",
+    "@supabase/supabase-js": "^2.43.0"
+  }
+}
