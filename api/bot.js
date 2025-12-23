@@ -9,7 +9,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_KEY);
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
 // 2. Настройка модели (Gemini 1.5 Pro - Самая умная)
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+const model = genAI.getGenerativeModel({ model: "gemini-3-pro" });
 
 // Промпт (Личность бота)
 const SYSTEM_PROMPT = `You are STNL Bot (Vibe: Gen Z, 'Stainless' mindset). 
