@@ -90,13 +90,20 @@ bot.on('text', async (ctx) => {
     }
 });
 
-// Экспорт для Vercel
+// Экспорт для Vercel Webhook
 module.exports = async (req, res) => {
     try {
+        // 1. Если просто открыли ссылку в браузере (GET)
+        if (req.method === 'GET') {
+            return res.status(200).send('STNL Bot is alive 🏴. Set the webhook to use it.');
+        }
+
+        // 2. Обработка данных от Telegram
         await bot.handleUpdate(req.body);
         res.status(200).send('OK');
     } catch (e) {
         console.error('Webhook Error:', e);
-        res.status(200).send('Error');
+        // Не отправляем 500, чтобы Telegram не спамил повторами
+        res.status(200).send('Error logged'); 
     }
 };
