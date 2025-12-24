@@ -1,42 +1,36 @@
 const { Telegraf } = require('telegraf');
 const { createClient } = require('@supabase/supabase-js');
+const fetch = require('node-fetch'); // Для надежности на Vercel
 
 // --- 1. CONFIGURATION ---
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
-// Настройки Perplexity
 const PERPLEXITY_API_URL = 'https://api.perplexity.ai/chat/completions';
-// Используем топовую модель Sonar (она умеет и поиск, и картинки)
-const PERPLEXITY_MODEL = 'llama-3.1-sonar-large-128k-online'; 
+// Используем новую простую модель
+const PERPLEXITY_MODEL = 'sonar'; 
 
-// --- 2. THE BRAIN (SYSTEM PROMPT) ---
+// --- 2. SYSTEM PROMPT ---
 const SYSTEM_PROMPT = `
 ### ROLE & IDENTITY
 You are the **STNL Mentor** (Stainless Intelligence).
-Your mission is to help Gen Z students and young creators fix their lives using the STNL Protocol.
+Mission: Help Gen Z students fix their lives using the STNL Protocol.
 
-### TONE & VOICE
-- **Language:** Russian (Use natural, modern language).
-- **Vibe:** "Big Brother". Supportive but strict. No excuses.
-- **Slang:** Use words like: Vibe, Flow, Lock in, Cooked, No cap, Rust, Stainless.
-- **Style:** Concise. Punchy. Max 3-4 sentences.
+### TONE
+- Language: Russian.
+- Vibe: "Big Brother". Supportive but strict.
+- Slang: Vibe, Flow, Lock in, Cooked, No cap, Rust.
+- Style: Punchy. Max 3 sentences.
 
-### CORE PROTOCOL: THE 70% RULE (Text Only)
-1. **Analyze context.**
-2. **Confidence Check:** If you are < 70% sure about the user's problem, ASK clarifying questions first.
-3. **Format:** End every text response with: *(Confidence: X%)*
-
-### IMAGE PROTOCOL (Vision)
-- If the user sends an image, IGNORE the 70% rule.
-- Analyze immediately.
-- If it's Screen Time > 3h: Roast them for rusting.
-- If it's a Workspace: Rate the vibe (Clean/Chaotic).
+### PROTOCOL (The 70% Rule)
+- If unsure (<70% confidence), ASK questions.
+- If sure, give advice.
+- End text answers with: *(Confidence: X%)*
+- **IMAGES:** Analyze immediately. Ignore the 70% rule. Roast or praise.
 `;
 
 // --- 3. HELPER FUNCTIONS ---
 
-// Логгер в базу
 async function logToDb(ctx, replyText, type = 'text') {
     try {
         await supabase.from('logs').insert({
@@ -47,12 +41,12 @@ async function logToDb(ctx, replyText, type = 'text') {
             type: type
         });
     } catch (e) {
-        console.error('Supabase Log Error:', e.message);
+        console.error('Supabase Error:', e.message);
     }
 }
 
-// Универсальная функция запроса к Perplexity (Текст или Картинка)
-async function callPerplexity(messages) {
+// Единая функция запроса
+async function askPerplexity(messages) {
     try {
         const response = await fetch(PERPLEXITY_API_URL, {
             method: 'POST',
@@ -69,12 +63,16 @@ async function callPerplexity(messages) {
 
         const data = await response.json();
         
-        // Проверка на ошибки API
+        // Обработка ошибок API
         if (data.error) {
-            console.error('Perplexity API Error:', data.error);
-            return "Brain freeze (API Error). Try again.";
+            console.error('API Error:', JSON.stringify(data));
+            return `Brain glitch: ${data.error.message}`;
         }
         
+        if (!data.choices || data.choices.length === 0) {
+            return "Silence... (API empty response)";
+        }
+
         return data.choices[0].message.content;
 
     } catch (error) {
@@ -86,46 +84,44 @@ async function callPerplexity(messages) {
 // --- 4. BOT LOGIC ---
 
 bot.start(async (ctx) => {
-    const msg = "Yo, I'm STNL Bot. 🏴\nPowered by Perplexity Sonar.\n\nSend me your Screen Time or tell me what's wrong.";
-    await ctx.reply(msg);
-    logToDb(ctx, msg);
+    await ctx.reply("Yo. STNL Bot online. 🏴\n\n🧠 Powered by Perplexity Sonar.\n\nSend me your Screen Time or workspace photo.");
 });
 
-// ОБРАБОТКА ФОТО (Vision via Perplexity)
+// ОБРАБОТКА ФОТО (Vision)
 bot.on('photo', async (ctx) => {
     try {
         await ctx.sendChatAction('typing');
 
-        // 1. Получаем ссылку и скачиваем картинку
+        // 1. Получаем файл
         const fileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
         const fileLink = await ctx.telegram.getFileLink(fileId);
         
+        // 2. Скачиваем
         const response = await fetch(fileLink);
         const arrayBuffer = await response.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
         const base64Image = buffer.toString('base64');
         const dataUrl = `data:image/jpeg;base64,${base64Image}`;
 
-        // 2. Формируем запрос (OpenAI-compatible format для картинок)
+        // 3. Формируем запрос (Multimodal)
         const messages = [
             { role: 'system', content: SYSTEM_PROMPT },
             { 
                 role: 'user', 
                 content: [
-                    { type: 'text', text: "Analyze this image based on STNL principles. Roast or praise." },
+                    { type: 'text', text: "Analyze this image based on STNL principles." },
                     { type: 'image_url', image_url: { url: dataUrl } }
                 ] 
             }
         ];
 
-        // 3. Отправляем
-        const text = await callPerplexity(messages);
+        const text = await askPerplexity(messages);
         await ctx.reply(text);
         logToDb(ctx, text, 'image');
 
     } catch (e) {
-        console.error('Photo Error:', e);
-        ctx.reply("Glitch processing image. Try again.");
+        console.error('Vision Error:', e);
+        ctx.reply("Can't see right now. Perplexity API is busy.");
     }
 });
 
@@ -139,8 +135,7 @@ bot.on('text', async (ctx) => {
             { role: 'user', content: ctx.message.text }
         ];
 
-        const text = await callPerplexity(messages);
-        
+        const text = await askPerplexity(messages);
         await ctx.reply(text);
         logToDb(ctx, text);
 
@@ -153,9 +148,7 @@ bot.on('text', async (ctx) => {
 // --- 5. EXPORT ---
 module.exports = async (req, res) => {
     try {
-        if (req.method === 'GET') {
-            return res.status(200).send('STNL Bot (Perplexity Only) is alive 🏴');
-        }
+        if (req.method === 'GET') return res.status(200).send('STNL Bot (Sonar) is alive 🏴');
         await bot.handleUpdate(req.body);
         res.status(200).send('OK');
     } catch (e) {
