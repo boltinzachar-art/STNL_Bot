@@ -9,7 +9,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_KEY);
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
 // Используем модель Gemini 1.5 Pro (самая умная)
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
 
 // --- 2. THE BRAIN (SYSTEM PROMPT) ---
 const SYSTEM_PROMPT = `
