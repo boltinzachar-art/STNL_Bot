@@ -1,6 +1,6 @@
 {
   "name": "stnl-bot",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "dependencies": {
     "telegraf": "^4.16.0",
     "@supabase/supabase-js": "^2.43.0",
