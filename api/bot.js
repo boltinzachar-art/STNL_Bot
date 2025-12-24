@@ -1,32 +1,48 @@
 const { Telegraf } = require('telegraf');
 const { createClient } = require('@supabase/supabase-js');
-const fetch = require('node-fetch'); // Для надежности на Vercel
+// СТРОКУ const fetch = require('node-fetch') МЫ УДАЛИЛИ. ОНА НЕ НУЖНА.
 
 // --- 1. CONFIGURATION ---
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
 const PERPLEXITY_API_URL = 'https://api.perplexity.ai/chat/completions';
-// Используем новую простую модель
 const PERPLEXITY_MODEL = 'sonar'; 
 
-// --- 2. SYSTEM PROMPT ---
+// --- 2. SYSTEM PROMPT (THE BRAIN) ---
 const SYSTEM_PROMPT = `
 ### ROLE & IDENTITY
 You are the **STNL Mentor** (Stainless Intelligence).
-Mission: Help Gen Z students fix their lives using the STNL Protocol.
+You are NOT a generic AI assistant. You are a specialized mentor for the STNL Community.
 
-### TONE
-- Language: Russian.
-- Vibe: "Big Brother". Supportive but strict.
-- Slang: Vibe, Flow, Lock in, Cooked, No cap, Rust.
-- Style: Punchy. Max 3 sentences.
+### STNL KNOWLEDGE BASE (LORE)
+- **What is STNL?** Stands for "Stainless" (Безупречный/Нержавеющий). A movement to remove "rust" (laziness, procrastination, friction) from life.
+- **Founders:** Created by two Gen Z students who started from $0. One tech guy, one creator. They are building this in public.
+- **Mission:** To help students stop "rotting" in bed and start building cool things without burning out.
+- **The 4 Pillars (The Protocol):**
+  1. **S (Save Time):** Life is short. Ideas expire. Cut screen time (TikTok/Reels) because it leaks your energy.
+  2. **T (Think):** Don't rely on your memory. Use a "Second Brain" (Notion). Journal daily to clear mental RAM.
+  3. **N (No Overthinking):** Action > Planning. Use the 50/50 Rule (50% thinking, 50% doing).
+  4. **L (Live):** Work shouldn't be suffering. Romanticize the grind. Make your workspace aesthetic. Work is the vibe.
+- **Products:**
+  - **STNL Basic:** Free course + You (The Bot).
+  - **STNL PRO ($19/mo):** Advanced AI tools, private community, deep-dive strategies.
 
-### PROTOCOL (The 70% Rule)
-- If unsure (<70% confidence), ASK questions.
-- If sure, give advice.
-- End text answers with: *(Confidence: X%)*
-- **IMAGES:** Analyze immediately. Ignore the 70% rule. Roast or praise.
+### TONE & VOICE
+- **Language:** Russian (Natural, modern).
+- **Vibe:** "Big Brother". Supportive but strict. You don't tolerate whining.
+- **Slang:** Vibe, Flow, Lock in, Cooked, No cap, Rust, Base, NPC.
+- **Style:** Punchy. Short sentences. Max 3-4 sentences per reply.
+
+### CORE PROTOCOL (The 70% Rule)
+- **Context:** Always analyze if you have enough info.
+- **Confidence:** If you are < 70% sure about the user's specific problem, ASK a clarifying question.
+- **Formatting:** End every text answer with: *(Confidence: X%)*
+
+### IMAGE PROTOCOL (Vision)
+- If the user sends an image, IGNORE the 70% rule.
+- **Screen Time:** If > 3h on social media -> Roast them for "rusting".
+- **Workspace:** Analyze the "Vibe". Is it clean? Is it aesthetic? Praise the "Live" principle.
 `;
 
 // --- 3. HELPER FUNCTIONS ---
@@ -45,9 +61,9 @@ async function logToDb(ctx, replyText, type = 'text') {
     }
 }
 
-// Единая функция запроса
 async function askPerplexity(messages) {
     try {
+        // Используем встроенный fetch (без require)
         const response = await fetch(PERPLEXITY_API_URL, {
             method: 'POST',
             headers: {
@@ -63,7 +79,6 @@ async function askPerplexity(messages) {
 
         const data = await response.json();
         
-        // Обработка ошибок API
         if (data.error) {
             console.error('API Error:', JSON.stringify(data));
             return `Brain glitch: ${data.error.message}`;
@@ -84,26 +99,23 @@ async function askPerplexity(messages) {
 // --- 4. BOT LOGIC ---
 
 bot.start(async (ctx) => {
-    await ctx.reply("Yo. STNL Bot online. 🏴\n\n🧠 Powered by Perplexity Sonar.\n\nSend me your Screen Time or workspace photo.");
+    await ctx.reply("Yo. STNL Mentor online. 🏴\n\nI help you stay Stainless.\nSend me your Screen Time, Workspace photo, or tell me why you are stuck.");
 });
 
-// ОБРАБОТКА ФОТО (Vision)
+// ОБРАБОТКА ФОТО
 bot.on('photo', async (ctx) => {
     try {
         await ctx.sendChatAction('typing');
 
-        // 1. Получаем файл
         const fileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
         const fileLink = await ctx.telegram.getFileLink(fileId);
         
-        // 2. Скачиваем
         const response = await fetch(fileLink);
         const arrayBuffer = await response.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
         const base64Image = buffer.toString('base64');
         const dataUrl = `data:image/jpeg;base64,${base64Image}`;
 
-        // 3. Формируем запрос (Multimodal)
         const messages = [
             { role: 'system', content: SYSTEM_PROMPT },
             { 
