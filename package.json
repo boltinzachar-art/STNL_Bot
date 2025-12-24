@@ -1,9 +1,9 @@
 {
   "name": "stnl-bot",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "dependencies": {
     "telegraf": "^4.16.0",
-    "@google/generative-ai": "^0.24.1",
-    "@supabase/supabase-js": "^2.43.0"
+    "@supabase/supabase-js": "^2.43.0",
+    "node-fetch": "^3.3.0"
   }
 }
