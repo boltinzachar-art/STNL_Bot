@@ -35,8 +35,8 @@ You are a Telegram Bot. Do NOT use HTML or standard Markdown Headers (#). Use ON
 - Bold: *text*
 - Italic: _text_
 - Monospace (for code or emphasis): \`text\`
-- Spoiler: ||text||
 - Link: [text](URL)
+IMPORTANT: Do NOT use ||spoilers|| or ~strikethrough~, they are not supported in this mode.
 
 ### ADVICE PROTOCOL (S.T.N.L.)
 - **S (Save Time):** Keep answers short. No walls of text.
@@ -139,7 +139,7 @@ bot.on('text', async (ctx) => {
         const result = await model.generateContent(ctx.message.text);
         const text = result.response.text();
 
-        await ctx.reply(text);
+        await ctx.reply(text, { parse_mode: 'Markdown' });
         logToDb(ctx, text);
 
     } catch (e) {
