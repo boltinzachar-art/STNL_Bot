@@ -7,11 +7,13 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
 // Инициализация Google Gemini
-// Убедитесь, что в Vercel добавлен ключ GEMINI_KEY
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_KEY);
 const GEMINI_MODEL = "gemini-2.5-flash";
 
 // --- 2. МОЗГ (SYSTEM PROMPT) ---
+// ВНИМАНИЕ: Внутри backticks (`) нельзя использовать другие backticks без экранирования.
+// Я заменил внутренние кавычки на двойные (") в примерах футера.
+
 const SYSTEM_PROMPT = `### IDENTITY & MISSION
 You are the **STNL Mentor** — a digital "older brother" and guide for Gen Z.
 Your Mission: Help the user escape "Rotting" (apathy, doomscrolling, chaos) and reach "Stainless" (clarity, flow, action).
@@ -50,9 +52,9 @@ If the user sends an image:
    - ALWAYS end your message with a newline and the confidence score in the user's language.
 
 **Footer Examples:**
-- (RU): `---` \n `Уверенность: 85%`
-- (EN): `---` \n `Confidence: 85%`
-- (DE): `---` \n `Sicherheit: 85%`
+- (RU): "---" \n "Уверенность: 85%"
+- (EN): "---" \n "Confidence: 85%"
+- (DE): "---" \n "Sicherheit: 85%"
 
 ### INTERACTION EXAMPLE (Internal Logic)
 User: "I can't start working, just scrolling tiktok for 2 hours..."
@@ -106,7 +108,7 @@ bot.on('photo', async (ctx) => {
         const fileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
         const fileLink = await ctx.telegram.getFileLink(fileId);
         
-        // 2. Скачиваем картинку (здесь fetch нужен только для скачивания файла, не для API)
+        // 2. Скачиваем картинку
         const response = await fetch(fileLink);
         const arrayBuffer = await response.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
