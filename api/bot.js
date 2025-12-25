@@ -2,63 +2,41 @@ const { Telegraf } = require('telegraf');
 const { createClient } = require('@supabase/supabase-js');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-// --- 1. CONFIGURATION ---
+// --- 1. НАСТРОЙКИ ---
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
-// Setup Gemini
+// Инициализация Google Gemini
+// Убедитесь, что в Vercel добавлен ключ GEMINI_KEY
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_KEY);
+const GEMINI_MODEL = "gemini-2.5-flash";
 
-// Using the latest lightweight model
-// Note: If this specific version is not found, rollback to "gemini-1.5-flash"
-const GEMINI_MODEL_NAME = "	gemini-2.5-flash"; 
-
-// --- 2. SYSTEM PROMPT (THE BRAIN) ---
+// --- 2. МОЗГ (SYSTEM PROMPT) ---
 const SYSTEM_PROMPT = `
 ### ROLE & IDENTITY
 You are the **STNL Mentor** (Stainless Intelligence).
-You are a wise, modern guide who has mastered the balance between digital chaos and deep focus.
-Your goal is not to "roast" the user, but to elevate them with respect and clarity.
+Goal: Help Gen Z students fix their lives using the STNL Protocol.
 
-### LANGUAGE PROTOCOL
-- **Detect Language:** You MUST reply in the same language the user is speaking.
-  - If user writes in English -> Reply in English.
-  - If user writes in Russian -> Reply in Russian.
+### TONE
+- Language: Russian.
+- Vibe: "Big Brother". Supportive but strict.
+- Slang: Vibe, Flow, Lock in, Cooked, No cap, Rust.
+- Style: Punchy. Max 3 sentences.
 
-### TONE & VOICE
-- **Wise & Respectful:** Treat the user as a future leader. Be patient with beginners. You are a partner, not a drill sergeant.
-- **Calm Authority:** You don't need to shout. Speak with quiet confidence.
-- **Subtle Modernity:** Use Gen Z concepts (Flow, Vibe, Lock in, Rust) naturally as philosophical terms, not just slang.
-- **Philosophy:** Focus on clarity, discipline, and the "Live" principle (enjoying the process).
-
-### STNL KNOWLEDGE BASE (LORE)
-- **STNL (Stainless):** A state of mind free from friction and mental rust (hesitation/laziness).
-- **The 4 Pillars:**
-  1. **S (Save Time):** Respect your limited time. Ideas expire if not acted upon.
-  2. **T (Think):** Clear your mind. Use a Second Brain (Notion) to hold ideas, so your mind is free to create.
-  3. **N (No Overthinking):** Action clarifies. Use the 50/50 Rule (50% thinking, 50% doing).
-  4. **L (Live):** Work is a form of art. Romanticize the grind. Make your environment aesthetic.
-
-### CORE PROTOCOL (The 70% Rule)
-1. **Analyze Context:** Do you truly understand the user's specific hurdle?
-2. **Confidence Check:**
-   - If Confidence < 70%: Ask a polite, guiding question to understand better.
-   - If Confidence >= 70%: Give specific, actionable advice.
-3. **Formatting:** End text answers with: *(Confidence: X%)*
-
-### IMAGE ANALYSIS (Vision)
-- **Screen Time:** If high, kindly remind them that time is their most valuable asset. Ask if they are trading their future for dopamine.
-- **Workspace:** Praise aesthetic and order. Encourage them to find joy in their environment.
+### PROTOCOL
+- If unsure (<70% confidence), ASK questions.
+- If sure, give advice.
+- End text answers with: *(Confidence: X%)*
+- **IMAGES:** Analyze immediately. Roast or praise based on "Screen Time" or "Workspace Vibe".
 `;
 
-// Initialize Model with System Instruction
+// Создаем модель с системной инструкцией
 const model = genAI.getGenerativeModel({ 
-    model: GEMINI_MODEL_NAME,
+    model: GEMINI_MODEL,
     systemInstruction: SYSTEM_PROMPT
 });
 
-// --- 3. HELPER FUNCTIONS ---
-
+// --- 3. ЛОГГЕР ---
 async function logToDb(ctx, replyText, type = 'text') {
     try {
         await supabase.from('logs').insert({
@@ -73,28 +51,28 @@ async function logToDb(ctx, replyText, type = 'text') {
     }
 }
 
-// --- 4. BOT LOGIC ---
+// --- 4. ЛОГИКА БОТА ---
 
 bot.start(async (ctx) => {
-    await ctx.reply("Yo. STNL Mentor online. 🏴\n\nPowered by Gemini 2.0 Flash Lite.\nI help you stay Stainless.\nSend me your Screen Time, Workspace photo, or tell me why you are stuck.");
+    await ctx.reply("Yo. STNL Mentor online. 🏴\n\nPowered by Gemini Flash.\nSend me your Screen Time or Workspace.");
 });
 
-// PHOTO HANDLING (Vision)
+// ОБРАБОТКА ФОТО (Через SDK)
 bot.on('photo', async (ctx) => {
     try {
         await ctx.sendChatAction('typing');
 
-        // 1. Get File Link
+        // 1. Получаем ссылку на файл от Telegram
         const fileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
         const fileLink = await ctx.telegram.getFileLink(fileId);
         
-        // 2. Download Buffer
+        // 2. Скачиваем картинку (здесь fetch нужен только для скачивания файла, не для API)
         const response = await fetch(fileLink);
         const arrayBuffer = await response.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
         const base64Image = buffer.toString('base64');
 
-        // 3. Send to Gemini
+        // 3. Отправляем в Gemini через SDK
         const result = await model.generateContent([
             "Analyze this image based on STNL principles.",
             {
@@ -111,16 +89,16 @@ bot.on('photo', async (ctx) => {
 
     } catch (e) {
         console.error('Vision Error:', e);
-        ctx.reply("My vision is blurry (API Error). Try again.");
+        ctx.reply("My vision is blurry. Try again.");
     }
 });
 
-// TEXT HANDLING
+// ОБРАБОТКА ТЕКСТА
 bot.on('text', async (ctx) => {
     try {
         await ctx.sendChatAction('typing');
         
-        // Gemini handles system prompt via initialization, so we just send user text
+        // SDK сам обрабатывает текст и системный промпт
         const result = await model.generateContent(ctx.message.text);
         const text = result.response.text();
 
@@ -133,11 +111,11 @@ bot.on('text', async (ctx) => {
     }
 });
 
-// --- 5. EXPORT (Vercel Webhook) ---
+// --- 5. EXPORT ---
 module.exports = async (req, res) => {
     try {
         if (req.method === 'GET') {
-            return res.status(200).send('STNL Bot (Gemini 2.0 Flash Lite) is alive 🏴');
+            return res.status(200).send('STNL Bot (Gemini) is alive 🏴');
         }
         await bot.handleUpdate(req.body);
         res.status(200).send('OK');
