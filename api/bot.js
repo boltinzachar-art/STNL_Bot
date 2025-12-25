@@ -1,13 +1,17 @@
 const { Telegraf } = require('telegraf');
 const { createClient } = require('@supabase/supabase-js');
-// СТРОКУ const fetch = require('node-fetch') МЫ УДАЛИЛИ. ОНА НЕ НУЖНА.
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 // --- 1. CONFIGURATION ---
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
-const PERPLEXITY_API_URL = 'https://api.perplexity.ai/chat/completions';
-const PERPLEXITY_MODEL = 'sonar'; 
+// Setup Gemini
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_KEY);
+
+// Using the latest lightweight model
+// Note: If this specific version is not found, rollback to "gemini-1.5-flash"
+const GEMINI_MODEL_NAME = "	gemini-2.5-flash"; 
 
 // --- 2. SYSTEM PROMPT (THE BRAIN) ---
 const SYSTEM_PROMPT = `
@@ -47,6 +51,12 @@ Your goal is not to "roast" the user, but to elevate them with respect and clari
 - **Workspace:** Praise aesthetic and order. Encourage them to find joy in their environment.
 `;
 
+// Initialize Model with System Instruction
+const model = genAI.getGenerativeModel({ 
+    model: GEMINI_MODEL_NAME,
+    systemInstruction: SYSTEM_PROMPT
+});
+
 // --- 3. HELPER FUNCTIONS ---
 
 async function logToDb(ctx, replyText, type = 'text') {
@@ -63,93 +73,57 @@ async function logToDb(ctx, replyText, type = 'text') {
     }
 }
 
-async function askPerplexity(messages) {
-    try {
-        // Используем встроенный fetch (без require)
-        const response = await fetch(PERPLEXITY_API_URL, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${process.env.PERPLEXITY_KEY}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                model: PERPLEXITY_MODEL,
-                messages: messages,
-                temperature: 0.6
-            })
-        });
-
-        const data = await response.json();
-        
-        if (data.error) {
-            console.error('API Error:', JSON.stringify(data));
-            return `Brain glitch: ${data.error.message}`;
-        }
-        
-        if (!data.choices || data.choices.length === 0) {
-            return "Silence... (API empty response)";
-        }
-
-        return data.choices[0].message.content;
-
-    } catch (error) {
-        console.error('Fetch Error:', error);
-        return "Connection lost. I'm offline.";
-    }
-}
-
 // --- 4. BOT LOGIC ---
 
 bot.start(async (ctx) => {
-    await ctx.reply("Yo. STNL Mentor online. 🏴\n\nI help you stay Stainless.\nSend me your Screen Time, Workspace photo, or tell me why you are stuck.");
+    await ctx.reply("Yo. STNL Mentor online. 🏴\n\nPowered by Gemini 2.0 Flash Lite.\nI help you stay Stainless.\nSend me your Screen Time, Workspace photo, or tell me why you are stuck.");
 });
 
-// ОБРАБОТКА ФОТО
+// PHOTO HANDLING (Vision)
 bot.on('photo', async (ctx) => {
     try {
         await ctx.sendChatAction('typing');
 
+        // 1. Get File Link
         const fileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
         const fileLink = await ctx.telegram.getFileLink(fileId);
         
+        // 2. Download Buffer
         const response = await fetch(fileLink);
         const arrayBuffer = await response.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
         const base64Image = buffer.toString('base64');
-        const dataUrl = `data:image/jpeg;base64,${base64Image}`;
 
-        const messages = [
-            { role: 'system', content: SYSTEM_PROMPT },
-            { 
-                role: 'user', 
-                content: [
-                    { type: 'text', text: "Analyze this image based on STNL principles." },
-                    { type: 'image_url', image_url: { url: dataUrl } }
-                ] 
-            }
-        ];
+        // 3. Send to Gemini
+        const result = await model.generateContent([
+            "Analyze this image based on STNL principles.",
+            {
+                inlineData: {
+                    data: base64Image,
+                    mimeType: "image/jpeg",
+                },
+            },
+        ]);
 
-        const text = await askPerplexity(messages);
+        const text = result.response.text();
         await ctx.reply(text);
         logToDb(ctx, text, 'image');
 
     } catch (e) {
         console.error('Vision Error:', e);
-        ctx.reply("Can't see right now. Perplexity API is busy.");
+        ctx.reply("My vision is blurry (API Error). Try again.");
     }
 });
 
-// ОБРАБОТКА ТЕКСТА
+// TEXT HANDLING
 bot.on('text', async (ctx) => {
     try {
         await ctx.sendChatAction('typing');
         
-        const messages = [
-            { role: 'system', content: SYSTEM_PROMPT },
-            { role: 'user', content: ctx.message.text }
-        ];
+        // Gemini handles system prompt via initialization, so we just send user text
+        const result = await model.generateContent(ctx.message.text);
+        const text = result.response.text();
 
-        const text = await askPerplexity(messages);
         await ctx.reply(text);
         logToDb(ctx, text);
 
@@ -159,10 +133,12 @@ bot.on('text', async (ctx) => {
     }
 });
 
-// --- 5. EXPORT ---
+// --- 5. EXPORT (Vercel Webhook) ---
 module.exports = async (req, res) => {
     try {
-        if (req.method === 'GET') return res.status(200).send('STNL Bot (Sonar) is alive 🏴');
+        if (req.method === 'GET') {
+            return res.status(200).send('STNL Bot (Gemini 2.0 Flash Lite) is alive 🏴');
+        }
         await bot.handleUpdate(req.body);
         res.status(200).send('OK');
     } catch (e) {
